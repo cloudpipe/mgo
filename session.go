@@ -28,6 +28,7 @@ package mgo
 
 import (
 	"crypto/md5"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -222,6 +223,11 @@ func DialWithTimeout(url string, timeout time.Duration) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// The DialServer option is nil when plaintext, gets set when ?ssl=true is
+	// part of the Mongo URL
+	var dialServer func(addr *ServerAddr) (net.Conn, error) = nil
+
 	direct := false
 	mechanism := ""
 	service := ""
@@ -242,6 +248,10 @@ func DialWithTimeout(url string, timeout time.Duration) (*Session, error) {
 			poolLimit, err = strconv.Atoi(v)
 			if err != nil {
 				return nil, errors.New("bad value for maxPoolSize: " + v)
+			}
+		case "ssl":
+			dialServer = func(addr *ServerAddr) (net.Conn, error) {
+				return tls.Dial("tcp", addr.String(), &tls.Config{})
 			}
 		case "connect":
 			if v == "direct" {
@@ -268,6 +278,7 @@ func DialWithTimeout(url string, timeout time.Duration) (*Session, error) {
 		Source:         source,
 		PoolLimit:      poolLimit,
 		ReplicaSetName: setName,
+		DialServer:     dialServer,
 	}
 	return DialWithInfo(&info)
 }
